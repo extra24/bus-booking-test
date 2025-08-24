@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  websocket:
+    build: ./websocket-server
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+
+  api:
+    build: ./api
+    ports:
+      - "3000:3000"
+    environment:
+      # Docker 네트워크 상의 서비스명으로 접근
+      - WS_HTTP_URL=http://websocket:8080
+      - MAX_USERS=50
+      - PORT=3000
+    depends_on:
+      - websocket
+
+  worker:
+    build: ./worker
+    environment:
+      - API_BASE=http://api:3000
+      - CONCURRENCY=8 # 컨테이너 내부 동시 처리 슬롯
+    depends_on:
+      - api
+      - websocket

@@ -1,0 +1,14 @@
+{
+  "name": "bus-booking-websocket",
+  "version": "1.0.0",
+  "description": "WebSocket server for real-time stats broadcasting",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "ws": "^8.17.0"
+  }
+}

@@ -1,0 +1,207 @@
+<!-- front-end/index.html -->
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>버스 예매 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f3f4f6;
+      }
+    </style>
+  </head>
+  <body class="flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg">
+      <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">
+        🚌 버스 예매 시스템
+      </h1>
+      <p class="text-sm text-gray-500 text-center mb-8">
+        대규모 트래픽을 처리하기 위한 가상 대기열 시스템입니다.
+      </p>
+
+      <div id="booking-form" class="space-y-4">
+        <div>
+          <label for="route" class="block text-sm font-medium text-gray-700"
+            >노선 선택</label
+          >
+          <select
+            id="route"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+          >
+            <option value="서울→부산">서울 → 부산</option>
+            <option value="서울→광주">서울 → 광주</option>
+            <option value="부산→서울">부산 → 서울</option>
+          </select>
+        </div>
+        <div>
+          <label for="date" class="block text-sm font-medium text-gray-700"
+            >날짜</label
+          >
+          <input
+            type="date"
+            id="date"
+            value="2025-10-06"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+          />
+        </div>
+        <div>
+          <label
+            for="passengers"
+            class="block text-sm font-medium text-gray-700"
+            >인원</label
+          >
+          <input
+            type="number"
+            id="passengers"
+            value="1"
+            min="1"
+            max="10"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+          />
+        </div>
+        <button
+          id="book-button"
+          onclick="bookBusTicket()"
+          class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+        >
+          예매하기
+        </button>
+      </div>
+
+      <div
+        id="status-display"
+        class="mt-8 p-4 bg-gray-100 rounded-lg text-sm text-gray-700 font-mono"
+      >
+        <h2 class="text-base font-semibold text-gray-800 mb-2">실시간 상태</h2>
+        <pre id="status-text"></pre>
+      </div>
+
+      <div
+        id="stats-display"
+        class="mt-6 p-4 bg-gray-100 rounded-lg text-sm text-gray-700 font-mono"
+      >
+        <h2 class="text-base font-semibold text-gray-800 mb-2">시스템 현황</h2>
+        <table class="w-full">
+          <tbody class="divide-y divide-gray-300">
+            <tr>
+              <td class="py-1">현재 접속자:</td>
+              <td id="active-users" class="py-1 text-right">--</td>
+            </tr>
+            <tr>
+              <td class="py-1">대기열 길이:</td>
+              <td id="queue-length" class="py-1 text-right">--</td>
+            </tr>
+            <tr>
+              <td class="py-1">총 요청 수:</td>
+              <td id="total-requests" class="py-1 text-right">--</td>
+            </tr>
+            <tr>
+              <td class="py-1">예매 성공률:</td>
+              <td id="success-rate" class="py-1 text-right">--</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      // 백엔드 URL을 로컬 환경에 맞게 설정
+      const backendUrl = "http://localhost:3000";
+      // 고유한 사용자 ID를 생성합니다.
+      const userId = "user-" + Math.random().toString(36).substr(2, 9);
+
+      const statusText = document.getElementById("status-text");
+      const activeUsersElement = document.getElementById("active-users");
+      const queueLengthElement = document.getElementById("queue-length");
+      const totalRequestsElement = document.getElementById("total-requests");
+      const successRateElement = document.getElementById("success-rate");
+
+      async function bookBusTicket() {
+        const route = document.getElementById("route").value;
+        const date = document.getElementById("date").value;
+        const passengers = document.getElementById("passengers").value;
+
+        statusText.textContent = `예매 요청 중... (UserID: ${userId})`;
+
+        try {
+          const response = await fetch(`${backendUrl}/api/book-bus`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, route, date, passengers }),
+          });
+
+          const data = await response.json();
+          statusText.textContent = JSON.stringify(data, null, 2);
+
+          // 시스템 현황 업데이트
+          updateStats();
+
+          if (data.status === "queued") {
+            // 대기열에 등록되면 주기적으로 상태를 확인합니다.
+            pollQueueStatus(data.userId);
+          }
+        } catch (error) {
+          statusText.textContent = `오류 발생: ${error.message}`;
+          console.error("Error:", error);
+        }
+      }
+
+      function pollQueueStatus(userId) {
+        const interval = setInterval(async () => {
+          try {
+            const response = await fetch(
+              `${backendUrl}/api/user-status/${userId}`
+            );
+            const data = await response.json();
+
+            statusText.textContent = JSON.stringify(data, null, 2);
+
+            if (
+              data.status === "active" ||
+              data.status === "completed" ||
+              data.status === "failed" ||
+              data.status === "not_found" ||
+              data.status === "error"
+            ) {
+              // 예매가 허용되거나(완료/실패), 세션 만료 시 폴링 중지
+              clearInterval(interval);
+              if (data.status === "completed") {
+                alert("예매가 허용되었습니다!");
+              }
+            }
+          } catch (error) {
+            console.error("Polling error:", error);
+            clearInterval(interval);
+          }
+        }, 3000); // 3초마다 상태 확인
+      }
+
+      async function updateStats() {
+        try {
+          const response = await fetch(`${backendUrl}/api/queue-status`);
+          const stats = await response.json();
+
+          activeUsersElement.textContent = `${stats.activeUsers} / ${stats.maxUsers}`;
+          queueLengthElement.textContent = stats.queueLength;
+          totalRequestsElement.textContent = stats.totalRequests;
+          successRateElement.textContent = stats.successRate;
+        } catch (error) {
+          console.error("Failed to fetch stats:", error);
+          activeUsersElement.textContent = "--";
+          queueLengthElement.textContent = "--";
+          totalRequestsElement.textContent = "--";
+          successRateElement.textContent = "--";
+        }
+      }
+
+      // 페이지 로드 시 초기 현황을 가져옵니다.
+      document.addEventListener("DOMContentLoaded", () => {
+        updateStats();
+        setInterval(updateStats, 5000); // 5초마다 자동 업데이트
+      });
+    </script>
+  </body>
+</html>
